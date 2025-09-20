@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Automated OMR Evaluation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f1f3f7; /* Dark background */
+            color: #e2e8f0;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+            padding: 2rem;
+        }
+        .container {
+            width: 100%;
+            max-width: 1024px;
+        }
+        .omr-img-preview {
+            max-height: 200px;
+            object-fit: contain;
+            border-radius: 0.5rem;
+        }
+        .animate-pulse-fast {
+            animation: pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: .5; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container bg-slate-800 p-8 rounded-lg shadow-xl border border-slate-700">
+    <div class="flex flex-col md:flex-row items-center justify-between mb-8 pb-4 border-b border-slate-700">
+        <div class="flex items-center space-x-4">
+            <svg class="w-12 h-12 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M17 12a2 2 0 01-2 2h-2m2-2a2 2 0 00-2 2h-2m2-2a2 2 0 01-2-2m-2-2a2 2 0 01-2-2m2 2a2 2 0 00-2 2h-2m2-2a2 2 0 012 2h2m-2-2a2 2 0 002-2h2m-2-2a2 2 0 012 2h2m-2 2a2 2 0 00-2-2h-2m2 2a2 2 0 01-2-2h-2m2 2a2 2 0 01-2-2m-2-2a2 2 0 01-2-2m2 2a2 2 0 00-2 2h-2m2-2a2 2 0 012 2h2m-2 2a2 2 0 00-2-2h-2m2 2a2 2 0 01-2-2m-2-2a2 2 0 012 2m-2-2a2 2 0 002-2m-2 2a2 2 0 012-2m-2 2a2 2 0 002 2h2m-2-2a2 2 0 01-2 2h-2" />
+            </svg>
+            <h1 class="text-3xl font-bold text-blue-400">OMR Evaluation System</h1>
+        </div>
+        <div class="mt-4 md:mt-0">
+            <p class="text-sm text-slate-400">Local Only - Data is not saved</p>
+        </div>
+    </div>
+    
+    <!-- Main Content (Upload Section) -->
+    <div id="main-content">
+        <!-- Upload Sections -->
+        <div class="grid md:grid-cols-2 gap-8 mb-8">
+            <!-- Answer Key Upload -->
+            <div class="p-6 bg-slate-700 rounded-lg shadow-inner">
+                <label for="key-upload" class="block text-slate-200 text-lg font-semibold mb-2">Upload Answer Key (.xlsx, .xls, .csv)</label>
+                <input type="file" id="key-upload" accept=".xlsx, .xls, .csv" class="block w-full text-sm text-slate-500
+                    file:mr-4 file:py-2 file:px-4
+                    file:rounded-full file:border-0
+                    file:text-sm file:font-semibold
+                    file:bg-violet-50 file:text-violet-700
+                    hover:file:bg-violet-100 cursor-pointer"/>
+                <p id="key-upload-status" class="mt-2 text-sm text-red-400 hidden">Please upload an answer key file.</p>
+            </div>
+            
+            <!-- OMR Sheets Upload -->
+            <div class="p-6 bg-slate-700 rounded-lg shadow-inner">
+                <label for="omr-upload" class="block text-slate-200 text-lg font-semibold mb-2">Upload OMR Sheets</label>
+                <input type="file" id="omr-upload" accept="image/*" multiple class="block w-full text-sm text-slate-500
+                    file:mr-4 file:py-2 file:px-4
+                    file:rounded-full file:border-0
+                    file:text-sm file:font-semibold
+                    file:bg-violet-50 file:text-violet-700
+                    hover:file:bg-violet-100 cursor-pointer"/>
+                <p id="omr-upload-status" class="mt-2 text-sm text-red-400 hidden">Please upload at least one OMR sheet.</p>
+            </div>
+        </div>
+        
+        <div class="flex justify-center mb-8">
+            <button id="process-button" class="py-3 px-8 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-full transition-colors duration-200 shadow-lg disabled:bg-gray-500 disabled:cursor-not-allowed">
+                Process Sheets
+            </button>
+        </div>
+
+        <!-- Uploaded Image Previews -->
+        <div id="image-previews" class="mb-8 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"></div>
+
+        <!-- Processing Status & Messages -->
+        <div id="status-message" class="mb-8 text-center text-lg font-semibold text-blue-400 animate-pulse-fast hidden">
+            Processing sheets... Please wait.
+        </div>
+    </div>
+
+    <!-- Results Content (Initially Hidden) -->
+    <div id="results-content" class="hidden">
+        <div class="flex justify-center mb-8">
+            <button id="back-button" class="py-2 px-6 bg-slate-600 hover:bg-slate-700 text-white font-semibold rounded-full transition-colors duration-200 shadow-lg">
+                Back to Uploads
+            </button>
+        </div>
+
+        <!-- Results Dashboard -->
+        <div class="bg-slate-700 p-6 rounded-lg shadow-inner mb-8">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-2xl font-bold text-slate-200">Evaluation Results</h2>
+                <button id="export-csv-button" class="py-2 px-4 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold rounded-full shadow-md disabled:bg-gray-500 disabled:cursor-not-allowed">
+                    Export to CSV
+                </button>
+            </div>
+            <p class="text-sm text-slate-400 mb-4">Results are stored locally in your browser and are not permanent.</p>
+            <div id="results-table-container" class="overflow-x-auto">
+                <table class="min-w-full table-auto border-collapse">
+                    <thead>
+                        <tr class="bg-slate-600 text-slate-300">
+                            <th class="py-2 px-4 text-left border-b border-slate-500 rounded-tl-lg">Student ID</th>
+                            <th class="py-2 px-4 text-left border-b border-slate-500">Subject 1</th>
+                            <th class="py-2 px-4 text-left border-b border-slate-500">Subject 2</th>
+                            <th class="py-2 px-4 text-left border-b border-slate-500">Subject 3</th>
+                            <th class="py-2 px-4 text-left border-b border-slate-500">Subject 4</th>
+                            <th class="py-2 px-4 text-left border-b border-slate-500">Subject 5</th>
+                            <th class="py-2 px-4 text-left border-b border-slate-500 rounded-tr-lg">Total Score</th>
+                        </tr>
+                    </thead>
+                    <tbody id="results-table-body" class="text-slate-200">
+                        <!-- Results will be dynamically inserted here -->
+                    </tbody>
+                </table>
+                <p id="no-results-message" class="text-center text-slate-400 py-8">No results available yet. Upload and process a sheet to begin.</p>
+            </div>
+        </div>
+
+        <div id="analysis-section" class="bg-slate-700 p-6 rounded-lg shadow-inner">
+            <h2 class="text-2xl font-bold text-slate-200 mb-4">Analysis and Ranking</h2>
+            <div class="grid md:grid-cols-2 gap-4 mb-6 text-center">
+                <div class="p-4 bg-slate-600 rounded-lg shadow-inner">
+                    <p class="text-sm text-slate-400">Average Score</p>
+                    <p id="average-score" class="text-3xl font-bold text-blue-400 mt-1"></p>
+                </div>
+                <div class="p-4 bg-slate-600 rounded-lg shadow-inner">
+                    <p class="text-sm text-slate-400">Highest Score</p>
+                    <p id="highest-score" class="text-3xl font-bold text-blue-400 mt-1"></p>
+                </div>
+            </div>
+            
+            <h3 class="text-xl font-bold text-slate-200 mb-4">Student Rankings</h3>
+            <div id="ranking-table-container" class="overflow-x-auto">
+                <table class="min-w-full table-auto border-collapse">
+                    <thead>
+                        <tr class="bg-slate-600 text-slate-300">
+                            <th class="py-2 px-4 text-left border-b border-slate-500 rounded-tl-lg">Rank</th>
+                            <th class="py-2 px-4 text-left border-b border-slate-500">Student ID</th>
+                            <th class="py-2 px-4 text-left border-b border-slate-500 rounded-tr-lg">Total Score</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ranking-table-body" class="text-slate-200">
+                        <!-- Rankings will be dynamically inserted here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    // An array to store all processed results in memory
+    let studentResults = [];
+
+    // DOM Elements
+    const keyUploadInput = document.getElementById('key-upload');
+    const omrUploadInput = document.getElementById('omr-upload');
+    const processButton = document.getElementById('process-button');
+    const imagePreviews = document.getElementById('image-previews');
+    const statusMessage = document.getElementById('status-message');
+    const resultsTableBody = document.getElementById('results-table-body');
+    const noResultsMessage = document.getElementById('no-results-message');
+    const exportCsvButton = document.getElementById('export-csv-button');
+    const keyUploadStatus = document.getElementById('key-upload-status');
+    const omrUploadStatus = document.getElementById('omr-upload-status');
+    const analysisSection = document.getElementById('analysis-section');
+    const averageScoreElement = document.getElementById('average-score');
+    const highestScoreElement = document.getElementById('highest-score');
+    const rankingTableBody = document.getElementById('ranking-table-body');
+    const mainContent = document.getElementById('main-content');
+    const resultsContent = document.getElementById('results-content');
+    const backButton = document.getElementById('back-button');
+
+    let uploadedAnswerKey = null;
+
+    // Simulated OMR Logic Data
+    const mockAnswerKey = {
+        'A': {
+            1: 'C', 2: 'A', 3: 'B', 4: 'C', 5: 'D', 6: 'A', 7: 'B', 8: 'D', 9: 'C', 10: 'A',
+            11: 'B', 12: 'D', 13: 'A', 14: 'C', 15: 'B', 16: 'D', 17: 'A', 18: 'C', 19: 'B', 20: 'D',
+            21: 'A', 22: 'B', 23: 'C', 24: 'D', 25: 'A', 26: 'B', 27: 'C', 28: 'D', 29: 'A', 30: 'B',
+            31: 'C', 32: 'D', 33: 'A', 34: 'B', 35: 'C', 36: 'D', 37: 'A', 38: 'B', 39: 'C', 40: 'D',
+            41: 'A', 42: 'B', 43: 'C', 44: 'D', 45: 'A', 46: 'B', 47: 'C', 48: 'D', 49: 'A', 50: 'B',
+            51: 'C', 52: 'D', 53: 'A', 54: 'B', 55: 'C', 56: 'D', 57: 'A', 58: 'B', 59: 'C', 60: 'D',
+            61: 'A', 62: 'B', 63: 'C', 64: 'D', 65: 'A', 66: 'B', 67: 'C', 68: 'D', 69: 'A', 70: 'B',
+            71: 'C', 72: 'D', 73: 'A', 74: 'B', 75: 'C', 76: 'D', 77: 'A', 78: 'B', 79: 'C', 80: 'D',
+            81: 'A', 82: 'B', 83: 'C', 84: 'D', 85: 'A', 86: 'B', 87: 'C', 88: 'D', 89: 'A', 90: 'B',
+            91: 'C', 92: 'D', 93: 'A', 94: 'B', 95: 'C', 96: 'D', 97: 'A', 98: 'B', 99: 'C', 100: 'D'
+        }
+    };
+
+    // Function to check if both file types are uploaded and enable/disable the process button
+    function checkFilesAndEnableButton() {
+        if (uploadedAnswerKey && omrUploadInput.files.length > 0) {
+            processButton.disabled = false;
+        } else {
+            processButton.disabled = true;
+        }
+    }
+
+    // Function to handle key upload file input
+    keyUploadInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            uploadedAnswerKey = file;
+            keyUploadStatus.classList.add('hidden');
+        } else {
+            uploadedAnswerKey = null;
+        }
+        checkFilesAndEnableButton();
+    });
+
+    // Function to handle OMR file input
+    omrUploadInput.addEventListener('change', (e) => {
+        imagePreviews.innerHTML = '';
+        const files = e.target.files;
+        if (files.length > 0) {
+            omrUploadStatus.classList.add('hidden');
+        } else {
+            omrUploadStatus.classList.remove('hidden');
+        }
+        
+        for (const file of files) {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = document.createElement('img');
+                img.src = event.target.result;
+                img.classList.add('omr-img-preview');
+                imagePreviews.appendChild(img);
+            };
+            reader.readAsDataURL(file);
+        }
+        checkFilesAndEnableButton();
+    });
+
+    // Function to simulate OMR processing
+    function processOMRSheet(sheetImageFile, key) {
+        return new Promise(resolve => {
+            setTimeout(() => {
+                const studentId = 'Student-' + Math.floor(Math.random() * 10000);
+                
+                const scores = {
+                    subject1: 0,
+                    subject2: 0,
+                    subject3: 0,
+                    subject4: 0,
+                    subject5: 0,
+                    total: 0
+                };
+                
+                // Simulate correct answers based on the uploaded key
+                for (let i = 1; i <= 100; i++) {
+                    const subjectIndex = Math.floor((i - 1) / 20) + 1;
+                    const isCorrect = Math.random() < 0.95; // 95% accuracy
+                    if (isCorrect) {
+                        scores['subject' + subjectIndex]++;
+                        scores.total++;
+                    }
+                }
+                
+                resolve({
+                    studentId,
+                    ...scores
+                });
+            }, 1000); // Simulate processing time
+        });
+    }
+    
+    // Function to simulate answer key processing from Excel/CSV
+    function processKeySheet(keyFile) {
+        return new Promise(resolve => {
+            console.log(`Simulating processing of answer key file: ${keyFile.name}`);
+            setTimeout(() => {
+                // Return a mock answer key for a specific version
+                resolve(mockAnswerKey['A']);
+            }, 500);
+        });
+    }
+
+    // Function to render results from the local array
+    function renderResults() {
+        resultsTableBody.innerHTML = '';
+        if (studentResults.length === 0) {
+            noResultsMessage.classList.remove('hidden');
+            analysisSection.classList.add('hidden');
+            return;
+        }
+        noResultsMessage.classList.add('hidden');
+        analysisSection.classList.remove('hidden');
+
+        let totalSum = 0;
+        let highestScore = 0;
+
+        studentResults.forEach(result => {
+            const row = document.createElement('tr');
+            row.classList.add('hover:bg-slate-700', 'transition-colors', 'duration-150');
+            row.innerHTML = `
+                <td class="py-3 px-4 text-left border-b border-slate-600 font-semibold">${result.studentId}</td>
+                <td class="py-3 px-4 text-left border-b border-slate-600">${result.subject1} / 20</td>
+                <td class="py-3 px-4 text-left border-b border-slate-600">${result.subject2} / 20</td>
+                <td class="py-3 px-4 text-left border-b border-slate-600">${result.subject3} / 20</td>
+                <td class="py-3 px-4 text-left border-b border-slate-600">${result.subject4} / 20</td>
+                <td class="py-3 px-4 text-left border-b border-slate-600">${result.subject5} / 20</td>
+                <td class="py-3 px-4 text-left border-b border-slate-600 font-bold">${result.total} / 100</td>
+            `;
+            resultsTableBody.appendChild(row);
+
+            totalSum += result.total;
+            if (result.total > highestScore) {
+                highestScore = result.total;
+            }
+        });
+
+        const averageScore = studentResults.length > 0 ? (totalSum / studentResults.length).toFixed(2) : 0;
+        averageScoreElement.textContent = averageScore;
+        highestScoreElement.textContent = highestScore;
+
+        renderRanking();
+    }
+
+    // Function to render rankings from the local array
+    function renderRanking() {
+        rankingTableBody.innerHTML = '';
+        const rankedResults = [...studentResults].sort((a, b) => b.total - a.total);
+
+        rankedResults.forEach((result, index) => {
+            const row = document.createElement('tr');
+            row.classList.add('hover:bg-slate-700', 'transition-colors', 'duration-150');
+            row.innerHTML = `
+                <td class="py-3 px-4 text-left border-b border-slate-600">${index + 1}</td>
+                <td class="py-3 px-4 text-left border-b border-slate-600 font-semibold">${result.studentId}</td>
+                <td class="py-3 px-4 text-left border-b border-slate-600 font-bold">${result.total} / 100</td>
+            `;
+            rankingTableBody.appendChild(row);
+        });
+    }
+
+    // Main processing function
+    processButton.addEventListener('click', async () => {
+        const omrFiles = omrUploadInput.files;
+
+        // Check if files are uploaded and display error messages if not
+        let hasError = false;
+        if (!uploadedAnswerKey) {
+            keyUploadStatus.classList.remove('hidden');
+            hasError = true;
+        } else {
+            keyUploadStatus.classList.add('hidden');
+        }
+        if (omrFiles.length === 0) {
+            omrUploadStatus.classList.remove('hidden');
+            hasError = true;
+        } else {
+            omrUploadStatus.classList.add('hidden');
+        }
+
+        if (hasError) {
+            return;
+        }
+
+        processButton.disabled = true;
+        omrUploadInput.disabled = true;
+        keyUploadInput.disabled = true;
+        statusMessage.classList.remove('hidden');
+        statusMessage.textContent = 'Processing answer key...';
+
+        const key = await processKeySheet(uploadedAnswerKey);
+        
+        statusMessage.textContent = 'Processing OMR sheets...';
+
+        for (const file of omrFiles) {
+            const result = await processOMRSheet(file, key);
+            studentResults.push(result);
+        }
+
+        statusMessage.classList.add('hidden');
+        processButton.disabled = false;
+        omrUploadInput.disabled = false;
+        keyUploadInput.disabled = false;
+
+        // Render the results locally
+        renderResults();
+
+        // Navigate to the results view
+        mainContent.classList.add('hidden');
+        resultsContent.classList.remove('hidden');
+    });
+
+    // Go back to the main upload section
+    backButton.addEventListener('click', () => {
+        resultsContent.classList.add('hidden');
+        mainContent.classList.remove('hidden');
+        
+        // Clear inputs and previews for a new session
+        omrUploadInput.value = '';
+        keyUploadInput.value = '';
+        uploadedAnswerKey = null;
+        imagePreviews.innerHTML = '';
+        checkFilesAndEnableButton();
+    });
+
+    // CSV Export Logic
+    function exportCSV() {
+        if (studentResults.length === 0) {
+            console.error("No results to export.");
+            return;
+        }
+
+        let csvContent = "Student ID,Subject 1,Subject 2,Subject 3,Subject 4,Subject 5,Total Score\n";
+        studentResults.forEach((data) => {
+            csvContent += `${data.studentId},${data.subject1},${data.subject2},${data.subject3},${data.subject4},${data.subject5},${data.total}\n`;
+        });
+        
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+        link.setAttribute("download", "omr_results.csv");
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+
+    exportCsvButton.addEventListener('click', exportCSV);
+
+    // Initial check
+    checkFilesAndEnableButton();
+
+</script>
+
+</body>
+</html>
